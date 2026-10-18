@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.2.7
+
+**Improvements**
+- bump github.com/charmbracelet/x/ansi from 0.11.8 to 0.11.9 #44 @app/dependabot
+- bump golang.org/x/sys from 0.48.0 to 0.49.0 #43 @app/dependabot
+- note the launcher has no test under bash 3.2 b30ccfb
+
+**Bug Fixes**
+- carry explicit revmux roots and warn when a worktree holds the archive #46 @umputun
+- preserve agterm overlay exit codes on bash 3.2 #42 @umputun
+
 ## v0.2.6
 
 **Improvements**
