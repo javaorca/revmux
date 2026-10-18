@@ -80,12 +80,20 @@ checkout and puts only `--workdir` in the branch, so the other two need no overr
 **5. Never `2>&1` into the report file.** stdout is the report, stderr is progress. Merging them makes
 the JSON unparseable.
 
+**6. An explicit root goes on every revmux call.** When this session runs revmux with `--tasks-dir` or
+`--config-dir` (non-negotiable 4, or because the user named one), every `revmux` command carries the
+same flags: the task match and `revmux new` in Step 2's brief, the launch in Step 4, `stats` and
+`cleanup` in housekeeping, `config` in self mode. A call without them reads or writes another archive.
+`task-state.sh` takes both flags and `preflight.sh` takes `--config-dir`, so each loads the
+configuration the run loads. `analyze-corpus.py` takes no `--config-dir`: give it `--tasks-dir` with
+the `paths.tasks_dir` that `revmux config` reports under those flags.
+
 ## Workflow
 
 ### Step 0: Preflight
 
 ```bash
-${CLAUDE_SKILL_DIR}/scripts/preflight.sh [profile] [--lenses]
+${CLAUDE_SKILL_DIR}/scripts/preflight.sh [profile] [--lenses] [--config-dir <dir>]
 ```
 
 Checks revmux plus every binary the invocation needs. Exits `1` naming what is missing.
@@ -111,6 +119,19 @@ brew install umputun/apps/revmux                   # macOS
 go install github.com/umputun/revmux/app@latest    # installs as 'app'; rename to 'revmux'
 git clone https://github.com/umputun/revmux.git && cd revmux && make install
 ```
+
+**In a linked worktree, tell the user what that means, once a session.** It is one when the two
+paths `git rev-parse --path-format=absolute --git-dir --git-common-dir` prints differ. Then say two
+separate things:
+
+- **Only when the archive is inside it** — resolve the `paths.tasks_dir` from `revmux config`
+  (non-negotiable 6 flags included) with `realpath`, or its nearest existing parent with the missing
+  part appended while it does not exist yet: revmux keeps symlinks in that path and git resolves them.
+  It is inside when it equals `git rev-parse --show-toplevel` or starts with it plus `/`. Then say
+  this task's rounds, at that path, are deleted when the worktree is removed, and self mode loses them. Keeping the worktree, or reviewing
+  from the main checkout, is what keeps them. Offer no copy: it is a write outside this checkout.
+- **Always:** Git does not copy the other checkout's untracked `.revmux/` files into a new linked
+  worktree, so local config and prompt overrides may differ from the main checkout's.
 
 ### Step 0.5: Offer the project profile, once per repository
 
@@ -205,6 +226,15 @@ Spawn **one** `general-purpose` agent. Hand it the resolved scope from Step 1 an
 
 > Prepare a revmux review round. Write files; change no source, run no review, commit nothing.
 >
+> Every `revmux` command below, and `task-state.sh`, carries `<this session's --tasks-dir/--config-dir
+> flags, or "no extra flags">`.
+>
+> **Write nothing outside the tree this session may write to, `revmux new` included.** If a guard
+> rejects only how a command is written and names a compliant form of the same operation inside this
+> tree (split it, quote it, run the plain command), follow that form once. Any other refusal, or a
+> second refusal of the same operation, ends the preparation: put its text in `notes` and return. Do
+> not retry it through another tool, a shell redirect, an API or a symlink.
+>
 > The scope is: `<the row resolved in Step 1, with its ref range>`, and its scale is
 > `<the shortstat Step 1 printed>`. Take the scale as given rather than measuring it again.
 > Exclusions the user has stated: `<list them, or "none">` — write these under the scope's
@@ -221,9 +251,9 @@ Spawn **one** `general-purpose` agent. Hand it the resolved scope from Step 1 an
 >    against the subject in hand, and reuse the matched `id` verbatim. Derive one only when nothing
 >    matches: `pr-<number>`, `issue-<number>`, a branch name with `/` replaced by `-`,
 >    `since-<short-sha>`, or `wip-<branch>`. No path separators, no `..`, no leading dot, not absolute.
-> 3. Run `<the absolute path this session resolved for scripts/task-state.sh> <task-id>`. It takes the
->    id as its one argument and exits 1 with a usage line without it. It validates the id and reports the
->    `task.md` anchors, every round, and each round's `input/` state — `prepared` (never reviewed),
+> 3. Run `<the absolute path this session resolved for scripts/task-state.sh> <task-id>`, with the
+>    flags named above when there are any. It exits 1 with a usage line without an id. It validates the
+>    id and reports the `task.md` anchors, every round, and each round's `input/` state — `prepared` (never reviewed),
 >    `claimed` (a review started and never finished) or `ran`. That is the inventory; do not `ls` the
 >    task or a round to confirm what it already told you.
 > 4. Name the round `NN-label` — `01-initial`, `02-after-fix`, `03-final` — with `NN` one past the
@@ -276,7 +306,10 @@ presented all stay in this session — they are the decisions the user is waitin
 a decision already made is not the same thing.
 
 **Check what comes back before launching.** A missing `round_dir` or an empty `wrote` means no round
-is ready and the run would fail on a missing scope; fix that here rather than launching into it. The
+is ready and the run would fail on a missing scope; fix that here rather than launching into it.
+**An unresolved refusal in `notes` blocks the launch even when `wrote` is not empty**: the round holds
+only part of its context. A command-form retry that went through is reported there too and blocks
+nothing. Tell the user what was refused and where, and launch nothing until it is resolved. The
 scale numbers are what Step 4's one-line announcement is built from.
 
 ### Step 3: Choose profile and flags
@@ -337,8 +370,8 @@ revmux --task <id> --run <name> --no-tui > /tmp/revmux-<id>-<run>.json 2> /tmp/r
 Launch in the background, wait for the notification.
 
 Reviewing a fetched pull request adds `--workdir <worktree>` and changes nothing else — including that
-the command is still run from the main checkout, which is what keeps the archive out of the directory
-the cleanup deletes. `references/pr.md` has the reasoning.
+the command is still run from the session's own checkout, which is what keeps the archive out of the
+directory the cleanup deletes. `references/pr.md` has the reasoning.
 
 **Before yielding, tell the user three things** — otherwise they sit for 10+ minutes with no signal:
 
