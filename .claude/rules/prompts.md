@@ -87,15 +87,15 @@ error, not a typo that silently becomes part of a model nobody checks.
 It lives here because the roster is the only place agent names exist, and it does not change the review —
 copying the prompt tree to another machine still produces the same findings.
 
-Two accepted forms, both normalized at load to a string a renderer hands straight to lipgloss —
+Two accepted forms, both normalized at load to the string `Paint` and `SGR` build an escape sequence from:
 an ANSI index `"0"`-`"15"` or the original `#RRGGBB`. `app/prompt` never imports lipgloss:
 
 - a **name** from the ANSI-16 set — `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`
-  and a `bright-` variant of each. lipgloss has no name lookup, so revmux maps names to indices `0`-`15`
-  itself, and that mapping is the point: an ANSI index is drawn from the user's own terminal theme, so
-  `red` is the red he already reads everywhere else
-- a `#RRGGBB` hex string, for a specific shade. lipgloss downsamples it on terminals that cannot show it,
-  and it ignores the terminal theme by definition — that is the trade the author is making by writing one
+  and a `bright-` variant of each. revmux maps names to indices `0`-`15` itself, and that mapping is the
+  point: an ANSI index is drawn from the user's own terminal theme, so `red` is the red he already reads
+  everywhere else
+- a `#RRGGBB` hex string, for a specific shade. `Paint` and `SGR` emit it as a 24-bit color without
+  downsampling, even on a terminal that cannot show one, and it ignores the terminal theme by definition — that is the trade the author is making by writing one
 
 A raw numeric index is deliberately not accepted: `color: 12` says nothing to the person editing the file,
 and the name it corresponds to always exists. Anything outside the two forms is a load-time error like

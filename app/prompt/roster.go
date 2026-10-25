@@ -104,8 +104,8 @@ type Stage struct {
 	runner   Runner
 }
 
-// AgentSpec is one roster entry. Color is the resolved form a renderer hands straight to lipgloss —
-// an ANSI index "0"-"15" or the original #RRGGBB — and ColorName is the authored value, empty when
+// AgentSpec is one roster entry. Color is the resolved form Paint and SGR build an escape sequence
+// from: an ANSI index "0"-"15" or the original #RRGGBB. ColorName is the authored value, empty when
 // the color came from the palette, so `revmux config` reads back `cyan` rather than "6".
 type AgentSpec struct {
 	Name      string   `json:"name"`
