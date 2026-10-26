@@ -26,8 +26,12 @@ import (
 
 var revision = "unknown"
 
-// executorCodex is the one roster executor that is not claude, which is also the default.
-const executorCodex = "codex"
+// executorCodex and executorDevin name the two roster executors that are not claude, which is also
+// the default.
+const (
+	executorCodex = "codex"
+	executorDevin = "devin"
+)
 
 // agentRetryDelay is the floor an agent waits before its one retry, which the pipeline jitters up to
 // twice that. A relaunch in the same millisecond band as the failure meets whatever transient condition
@@ -367,17 +371,22 @@ func (o runOpts) tty() *os.File {
 }
 
 // runnerFactory builds the per-spec executor factory. A caller-supplied one wins, so a test drives
-// the whole slice without spawning a model CLI. Both executors are built once and shared: each holds
-// immutable configuration only, and the roster runs them concurrently.
+// the whole slice without spawning a model CLI. All three executors are built once and shared: each
+// holds immutable configuration only, and the roster runs them concurrently.
 func (o runOpts) runnerFactory(rc reviewContext) func(pipeline.RunnerSpec) pipeline.Runner {
 	if o.newRunner != nil {
 		return o.newRunner
 	}
 	runner, eo := executor.NewRunner(), o.opts.executorOpts(rc, o.clock)
-	claude, codex := executor.NewClaude(runner, eo), executor.NewCodex(runner, eo)
+	claude := executor.NewClaude(runner, eo)
+	codex := executor.NewCodex(runner, eo)
+	devin := executor.NewDevin(runner, eo)
 	return func(spec pipeline.RunnerSpec) pipeline.Runner {
-		if spec.Executor == executorCodex {
+		switch spec.Executor {
+		case executorCodex:
 			return codex
+		case executorDevin:
+			return devin
 		}
 		return claude
 	}

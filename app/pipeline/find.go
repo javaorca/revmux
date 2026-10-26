@@ -18,8 +18,13 @@ import (
 	"github.com/umputun/revmux/app/task"
 )
 
-// executorCodex names the one roster executor whose output is prose rather than stream-json, so its
-// verbatim tee gets a different extension.
+// executorClaude names the executor whose structured output arrives inside its stream rather than in
+// prose around it, which is the one thing the archive checks an executor's name for.
+const executorClaude = "claude"
+
+// executorCodex names the one roster executor whose verbatim tee is prose rather than a line-delimited
+// stream, so the tee gets a different extension. Devin's ACP stream is line-delimited and shares the
+// default.
 const executorCodex = "codex"
 
 // maxAttempts is one launch plus one retry. A second failure degrades the source and the run

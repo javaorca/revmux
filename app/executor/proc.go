@@ -30,11 +30,16 @@ type runSpec struct {
 	// it reasons, and the only proof it is alive is its rollout file, which proc knows nothing about.
 	// Called once, before anything can stall.
 	shareTouch func(func())
+	// takeStdin hands the executor a live stdin pipe instead of the prompt as a one-shot reader.
+	// Devin is the case: ACP is a conversation, not a document — the prompt is one request inside it,
+	// and the executor must keep writing (permission answers) while it reads. Called inside start,
+	// before the process exists, so parse always finds the writer set.
+	takeStdin func(io.WriteCloser)
 }
 
-// proc is the machinery Claude and Codex share: start, idle watchdog, process-group teardown, line
-// reading. It holds immutable configuration only — one instance serves every roster entry concurrently,
-// so any per-run state would be a data race.
+// proc is the machinery Claude, Codex and Devin share: start, idle watchdog, process-group teardown,
+// line reading. It holds immutable configuration only — one instance serves every roster entry
+// concurrently, so any per-run state would be a data race.
 type proc struct {
 	bin    string
 	runner CommandRunner
@@ -72,7 +77,7 @@ func (p *proc) run(ctx context.Context, req Request, spec runSpec) (Result, erro
 		defer idle.Stop()
 	}
 
-	run, err := p.start(runCtx, spec.argv, req.Prompt)
+	run, err := p.start(runCtx, spec, req.Prompt)
 	if err != nil {
 		return Result{}, err
 	}
@@ -135,11 +140,19 @@ func (p *proc) rawSink(buf *strings.Builder, extra io.Writer) io.Writer {
 	return io.MultiWriter(buf, extra)
 }
 
-func (p *proc) start(ctx context.Context, argv []string, prompt string) (*procRun, error) {
-	cmd := p.runner.Command(ctx, p.bin, argv...)
+func (p *proc) start(ctx context.Context, spec runSpec, prompt string) (*procRun, error) {
+	cmd := p.runner.Command(ctx, p.bin, spec.argv...)
 	cmd.Env = p.childEnv()
 	cmd.Dir = p.opts.WorkDir
-	cmd.Stdin = strings.NewReader(prompt)
+	if spec.takeStdin != nil {
+		stdin, err := cmd.StdinPipe()
+		if err != nil {
+			return nil, fmt.Errorf("stdin pipe for %s: %w", p.bin, err)
+		}
+		spec.takeStdin(stdin)
+	} else {
+		cmd.Stdin = strings.NewReader(prompt)
+	}
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {

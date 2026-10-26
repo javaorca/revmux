@@ -53,7 +53,7 @@ func NewCodex(runner CommandRunner, opts Opts) *Codex {
 // Run executes one request. A non-zero exit or an idle timeout comes back on the Result rather than as
 // an error, and output holding no JSON degrades the source instead of failing the run.
 func (c *Codex) Run(ctx context.Context, req Request, sink EventSink) (Result, error) {
-	req.Prompt += CodexOutputContract(req.Schema)
+	req.Prompt += OutputContract(req.Schema)
 	session := make(chan string, 1)
 	errs := newCodexStderr(func(ev Event) { c.emit(sink, ev) }, session)
 
@@ -101,7 +101,7 @@ func (c *Codex) Run(ctx context.Context, req Request, sink EventSink) (Result, e
 	if err != nil {
 		return res, err
 	}
-	if out, exErr := c.extract(res.Raw); exErr == nil {
+	if out, exErr := extractJSONAnswer(res.Raw); exErr == nil {
 		res.StructuredOutput = out
 	}
 	return c.classify(res, errs.diag, sink)
@@ -122,11 +122,12 @@ func (c *Codex) args(req Request) []string {
 	return argv
 }
 
-// CodexOutputContract is codex's substitute for claude's --json-schema, appended to every prompt Run
-// dispatches. The schema comes off the request, so a codex entry running synthesis or verify asks for
-// that stage's shape. Exported because Run appends it after the caller archived the composed prompt, and
-// an archived prompt missing it describes a run that did not happen.
-func CodexOutputContract(schema json.RawMessage) string {
+// OutputContract is the substitute for claude's --json-schema that the prose executors append to every
+// prompt Run dispatches — codex has no schema flag, and devin's ACP protocol has no schema either. The
+// schema comes off the request, so an entry running synthesis or verify asks for that stage's shape.
+// Exported because Run appends it after the caller archived the composed prompt, and an archived prompt
+// missing it describes a run that did not happen.
+func OutputContract(schema json.RawMessage) string {
 	if len(schema) == 0 {
 		return ""
 	}
@@ -154,10 +155,11 @@ func (c *Codex) drain(ctx context.Context, r io.Reader, sink EventSink) Result {
 	return Result{}
 }
 
-// extract pulls the answer out of output that may carry prose around it. Decoding starts at each brace
-// in turn, and an incomplete tail ends the search rather than continuing into it: a nested object inside
-// a truncated answer would otherwise come back looking like the whole answer.
-func (c *Codex) extract(raw string) (json.RawMessage, error) {
+// extractJSONAnswer pulls the answer out of output that may carry prose around it — codex's raw
+// stdout, or the message text a devin session accumulated. Decoding starts at each brace in turn, and
+// an incomplete tail ends the search rather than continuing into it: a nested object inside a
+// truncated answer would otherwise come back looking like the whole answer.
+func extractJSONAnswer(raw string) (json.RawMessage, error) {
 	for i, ch := range raw {
 		if ch != '{' {
 			continue
@@ -171,7 +173,7 @@ func (c *Codex) extract(raw string) (json.RawMessage, error) {
 			break
 		}
 	}
-	return nil, errors.New("no JSON object in codex output")
+	return nil, errors.New("no JSON object in the answer")
 }
 
 // classify tiers a failed run: transient hiccup, quota, or a hard diagnostic. Patterns are consulted

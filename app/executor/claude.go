@@ -42,7 +42,7 @@ func (c *Claude) Run(ctx context.Context, req Request, sink EventSink) (Result, 
 // ClaudeNarrationContract asks the model to say what it is doing, and exists because --json-schema
 // otherwise makes it silent: the schema forces every conclusion through a StructuredOutput tool call, so
 // text blocks come back all but empty. Only with a schema — a schema-less call writes prose already.
-// Exported for the same reason CodexOutputContract is: Run appends it after the prompt was archived.
+// Exported for the same reason OutputContract is: Run appends it after the prompt was archived.
 func ClaudeNarrationContract(schema json.RawMessage) string {
 	if len(schema) == 0 {
 		return ""

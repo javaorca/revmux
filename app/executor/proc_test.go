@@ -1,8 +1,10 @@
 package executor_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -24,8 +26,8 @@ import (
 
 // helperCmd re-executes the test binary as a stand-in for a model CLI. Everything after "--" is ours:
 // the testing package stops flag parsing there and leaves the rest in os.Args. An optional third
-// argument names a file the helper writes to stderr, which is where codex puts its header and its
-// plan-quota diagnostics.
+// argument names a file the helper writes to stderr — or, in "acp" mode, the file it dumps every
+// stdin line it received into, which is where a test reads back what the client sent.
 func helperCmd(mode, path string, errPath ...string) *exec.Cmd {
 	argv := append([]string{"-test.run=TestHelperProcess", "--", mode, path}, errPath...)
 	//nolint:gosec // every argument comes from the test that builds this command
@@ -60,6 +62,9 @@ func TestHelperProcess(t *testing.T) {
 	case "echo":
 		_, _ = io.Copy(os.Stdout, os.Stdin)
 		syscall.Exit(0)
+	case "acp":
+		acpFake(path, os.Args[idx+3:])
+		syscall.Exit(0)
 	}
 
 	if idx+3 < len(os.Args) {
@@ -91,6 +96,57 @@ func TestHelperProcess(t *testing.T) {
 		syscall.Exit(3)
 	}
 	syscall.Exit(0)
+}
+
+// acpFake is a stand-in `devin acp` server: it answers initialize and session/new, replays the
+// fixture during session/prompt, then closes with a fixed usage-bearing result. A fixture whose
+// first line is `!error <message>` gets an rpc error instead. Server→client requests inside the
+// fixture need no special handling — the client's answer arrives on stdin like any other line and
+// is only interesting as dump content.
+func acpFake(path string, extra []string) {
+	fixture, _ := os.ReadFile(path) //nolint:gosec // the path is built by the test that spawned this
+	var dump *os.File
+	if len(extra) > 0 {
+		dump, _ = os.Create(extra[0]) //nolint:gosec // same
+	}
+	if dump != nil {
+		defer func() { _ = dump.Close() }()
+	}
+
+	sc := bufio.NewScanner(os.Stdin)
+	sc.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), 8<<20)
+	write := func(format string, args ...any) { fmt.Fprintf(os.Stdout, format+"\n", args...) }
+	for sc.Scan() {
+		line := sc.Bytes()
+		if dump != nil {
+			_, _ = dump.Write(append(line, '\n'))
+		}
+		var m struct {
+			ID     json.RawMessage `json:"id"`
+			Method string          `json:"method"`
+		}
+		if err := json.Unmarshal(line, &m); err != nil || m.Method == "" {
+			continue // a response to something the fake asked, or garbage: neither advances anything
+		}
+		switch m.Method {
+		case "initialize":
+			write(`{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":1,"agentCapabilities":{}}}`, m.ID)
+		case "session/new":
+			write(`{"jsonrpc":"2.0","id":%s,"result":{"sessionId":"fake-session"}}`, m.ID)
+		case "session/prompt":
+			if msg, isErr := bytes.CutPrefix(fixture, []byte("!error ")); isErr {
+				q, _ := json.Marshal(strings.TrimSpace(string(msg)))
+				write(`{"jsonrpc":"2.0","id":%s,"error":{"code":-32000,"message":%s}}`, m.ID, q)
+				continue
+			}
+			_, _ = os.Stdout.Write(fixture)
+			if len(fixture) > 0 && fixture[len(fixture)-1] != '\n' {
+				_, _ = os.Stdout.Write([]byte("\n"))
+			}
+			write(`{"jsonrpc":"2.0","id":%s,"result":{"stopReason":"end_turn",`+
+				`"usage":{"totalTokens":41,"inputTokens":30,"outputTokens":11}}}`, m.ID)
+		}
+	}
 }
 
 func TestClaude_Run_scrubsChildEnv(t *testing.T) {

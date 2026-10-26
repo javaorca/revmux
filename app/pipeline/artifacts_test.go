@@ -298,8 +298,8 @@ func artifactHarness(t *testing.T) (*harness, func() []string) {
 				// the prompt as handed over would make "the archived prompt is what a process
 				// received" pass against bytes no process would ever receive.
 				prompt := req.Prompt + executor.ClaudeNarrationContract(req.Schema)
-				if spec.Executor == executorCodex {
-					prompt = req.Prompt + executor.CodexOutputContract(req.Schema)
+				if spec.Executor != executorClaude {
+					prompt = req.Prompt + executor.OutputContract(req.Schema)
 				}
 				mu.Lock()
 				prompts = append(prompts, prompt)

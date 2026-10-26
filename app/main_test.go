@@ -1177,8 +1177,8 @@ func (r *runHarness) newRunner(spec pipeline.RunnerSpec) pipeline.Runner {
 			// what a process would actually receive, or an archive compared against this is compared
 			// against bytes no process ever saw
 			received := req.Prompt + executor.ClaudeNarrationContract(req.Schema)
-			if spec.Executor == "codex" {
-				received = req.Prompt + executor.CodexOutputContract(req.Schema)
+			if spec.Executor != "claude" {
+				received = req.Prompt + executor.OutputContract(req.Schema)
 			}
 			r.mu.Lock()
 			r.seen = append(r.seen, received)
