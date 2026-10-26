@@ -15,7 +15,8 @@
     "multi-agent",
     "supervision",
     "claude",
-    "codex"
+    "codex",
+    "devin"
   ],
   "skills": "./skills/",
   "interface": {

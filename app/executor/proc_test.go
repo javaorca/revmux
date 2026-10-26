@@ -100,11 +100,13 @@ func TestHelperProcess(t *testing.T) {
 
 // acpFake is a stand-in `devin acp` server: it answers initialize and session/new, replays the
 // fixture during session/prompt, then closes with a fixed usage-bearing result. A fixture whose
-// first line is `!error <message>` gets an rpc error instead. Server→client requests inside the
-// fixture need no special handling — the client's answer arrives on stdin like any other line and
-// is only interesting as dump content.
+// first line is `!error <message>` gets an rpc error instead; one starting `!nousage` gets a result
+// carrying no usage block, so agent_stopped's count is the one the run reports. Server→client
+// requests inside the fixture need no special handling — the client's answer arrives on stdin like
+// any other line and is only interesting as dump content.
 func acpFake(path string, extra []string) {
 	fixture, _ := os.ReadFile(path) //nolint:gosec // the path is built by the test that spawned this
+	body, noUsage := bytes.CutPrefix(fixture, []byte("!nousage\n"))
 	var dump *os.File
 	if len(extra) > 0 {
 		dump, _ = os.Create(extra[0]) //nolint:gosec // same
@@ -134,14 +136,18 @@ func acpFake(path string, extra []string) {
 		case "session/new":
 			write(`{"jsonrpc":"2.0","id":%s,"result":{"sessionId":"fake-session"}}`, m.ID)
 		case "session/prompt":
-			if msg, isErr := bytes.CutPrefix(fixture, []byte("!error ")); isErr {
+			if msg, isErr := bytes.CutPrefix(body, []byte("!error ")); isErr {
 				q, _ := json.Marshal(strings.TrimSpace(string(msg)))
 				write(`{"jsonrpc":"2.0","id":%s,"error":{"code":-32000,"message":%s}}`, m.ID, q)
 				continue
 			}
-			_, _ = os.Stdout.Write(fixture)
-			if len(fixture) > 0 && fixture[len(fixture)-1] != '\n' {
+			_, _ = os.Stdout.Write(body)
+			if len(body) > 0 && body[len(body)-1] != '\n' {
 				_, _ = os.Stdout.Write([]byte("\n"))
+			}
+			if noUsage {
+				write(`{"jsonrpc":"2.0","id":%s,"result":{"stopReason":"end_turn"}}`, m.ID)
+				continue
 			}
 			write(`{"jsonrpc":"2.0","id":%s,"result":{"stopReason":"end_turn",`+
 				`"usage":{"totalTokens":41,"inputTokens":30,"outputTokens":11}}}`, m.ID)

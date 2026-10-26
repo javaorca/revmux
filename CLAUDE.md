@@ -81,7 +81,7 @@ If a note would be equally true of any Go project, it does not belong here.
 - `app/artifacts.go` — the artifacts `package main` owns: `manifest.json`, `report.md`, `findings.json`
 - `app/progress.go` — the non-TTY event subscriber (timestamped lines to stderr), plus the run's closing
   summary, which the pipeline emits no event for
-- `app/executor/` — supervised subprocess execution for claude and codex
+- `app/executor/` — supervised subprocess execution for claude, codex and devin
 - `app/prompt/` — front matter and roster parsing, lens composition, `{{VAR}}` substitution, `go:embed` defaults
 - `app/pipeline/` — the three stages, fan-out, stagger, degrade policy, typed event channel
 - `app/finding/` — `Finding` and `Report` types, the per-stage JSON schemas, markdown and JSON rendering
@@ -337,8 +337,8 @@ There is no codex-specific prompt file — the shipped `adversarial` entry compo
 `lenses/adversarial.md`, and only its `model:` says codex runs it.
 An agent is named for its lens, never for its binary: the exception is a profile whose agents carry
 identical lens sets, where the runner is the only thing distinguishing them — `grill-me` and `expert`.
-Lens text stays executor-agnostic; the output-contract difference (claude has `--json-schema`, codex does not)
-is injected by the executor, never authored into a lens file.
+Lens text stays executor-agnostic; the output-contract difference (claude has `--json-schema`, codex and
+devin do not) is injected by the executor, never authored into a lens file.
 A roster entry also carries an optional `color` — an ANSI-16 name or `#RRGGBB` — resolved in `app/prompt`
 and handed to both renderers, so the TUI and `--no-tui` never color the same agent differently.
 
@@ -692,7 +692,7 @@ Every animation is disabled under `prefers-reduced-motion`.
 
 Detailed per-subsystem engineering notes live in `.claude/rules/*.md`, each scoped with `paths:` frontmatter.
 
-- `.claude/rules/executor.md` — subprocess supervision, verified `claude` and `codex` CLI behavior, stream decoding
+- `.claude/rules/executor.md` — subprocess supervision, verified `claude`, `codex` and `devin` CLI behavior, stream decoding
 - `.claude/rules/pipeline.md` — the three-stage contract, degrade policy, stagger, event channel
 - `.claude/rules/prompts.md` — front matter, roster resolution, lens composition, config precedence
 - `.claude/rules/tui.md` — bubbletea conventions and the lipgloss/ANSI traps

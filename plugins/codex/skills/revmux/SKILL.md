@@ -12,8 +12,8 @@ description: >
 
 # revmux — supervised multi-agent code review
 
-revmux spawns and supervises parallel `claude --print` and `codex exec` subprocesses, watches each for
-stalls, retries what hangs, and returns findings on stdout.
+revmux spawns and supervises parallel `claude --print`, `codex exec` and `devin acp` subprocesses,
+watches each for stalls, retries what hangs, and returns findings on stdout.
 
 It does no scope detection, no git, no PR fetching, no source modification. This skill does that half.
 
@@ -334,6 +334,7 @@ scale numbers are what Step 4's one-line announcement is built from.
 | `final` | `bugs+impl` plus codex peer, nothing below major | pre-merge |
 | `claude-only` | the same four lens splits, all on claude | no codex available |
 | `codex-only` | the same four lens splits on codex, and synthesis and verify with them | no claude available |
+| `devin-only` | the same four lens splits on devin, and synthesis and verify with them | no claude or codex available |
 | `grill-me` | `bugs+impl` and `architecture+quality`, each once on claude and once on codex, all reading against the change | the user wants it torn apart |
 | `expert` | two agents at xhigh, codex `gpt-6-astra:xhigh` and claude `fable:xhigh`, each carrying all eight lenses | a plan, or a change nobody wants to get wrong. Slow and expensive; pick it when he says so, not by default |
 | `triage` | `facts` (grounding + precedent), `thesis`, `antithesis`, `cost` on codex | a filed item rather than a diff; needs `--no-synthesis --verify-group-by source`, `references/triage.md` |
@@ -356,6 +357,7 @@ fails the run.
 | last, pre-merge, before merge, strict | `final` |
 | claude only, no codex, skip codex | `claude-only` |
 | codex only, no claude, codex alone | `codex-only` |
+| devin only, no claude or codex, devin alone | `devin-only` |
 | grill me, tear it apart, be brutal, no mercy, adversarial | `grill-me` |
 | expert, best models, highest effort, spare no expense, use astra and fable | `expert` — and only on words like these, never inferred from the subject |
 | triage this, is this worth doing, should we accept this, should I close this | `triage`, and the subject is a filed item rather than a diff — `references/triage.md`, which owns the flags it needs |

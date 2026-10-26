@@ -21,7 +21,7 @@ const (
 // devinLimitPatterns mark an rpc error worth reporting as a limit rather than a failure. Devin
 // answers a rate-limited prompt with a JSON-RPC error, never with the prose codex pattern-matches,
 // so the match is small and direct.
-var devinLimitPatterns = []string{"rate limit", "429", "too many requests", "quota", "usage limit", "insufficient"}
+var devinLimitPatterns = []string{"rate limit", "429", "too many requests", "quota", "usage limit", "insufficient_quota"}
 
 // Devin runs `devin acp`, the Agent Client Protocol server the CLI exposes on stdio. It is the one
 // executor that speaks a protocol rather than a document: stdout is newline-delimited JSON-RPC in
@@ -44,10 +44,11 @@ func (d *Devin) Run(ctx context.Context, req Request, sink EventSink) (Result, e
 	req.Prompt += OutputContract(req.Schema)
 	sess := &acpSession{d: d, sink: sink, prompt: req.Prompt}
 	spec := runSpec{
-		argv:      d.args(req),
-		sink:      sink,
-		takeStdin: sess.attach,
-		parse:     func(ctx context.Context, r io.Reader) Result { return sess.run(ctx, r) },
+		argv:       d.args(req),
+		sink:       sink,
+		takeStdin:  sess.attach,
+		stderrLine: sess.noteStderr,
+		parse:      func(ctx context.Context, r io.Reader) Result { return sess.run(ctx, r) },
 	}
 	res, err := d.run(ctx, req, spec)
 	res.RequestedModel = req.Model
@@ -64,6 +65,10 @@ func (d *Devin) Run(ctx context.Context, req Request, sink EventSink) (Result, e
 		d.emit(sink, Event{Kind: EventRateLimit, Text: sess.limited})
 	case sess.err != nil:
 		return res, sess.err
+	case res.ExitCode != 0 && sess.diag != "" && !res.IdleTimedOut:
+		// a devin that dies before the protocol exists — an old CLI without acp, missing auth —
+		// says why on stderr, and "exit 3" alone sends the reader looking for the real line
+		return res, fmt.Errorf("devin failed: %s", sess.diag)
 	}
 	if out, exErr := extractJSONAnswer(sess.answer.String()); exErr == nil {
 		res.StructuredOutput = out
@@ -102,6 +107,7 @@ type acpSession struct {
 	ttftMs    int
 	err       error  // the first rpc-level failure
 	limited   string // the limit pattern an rpc error carried
+	diag      string // the last non-empty stderr line, for a process that fails before the protocol
 }
 
 // attach is runSpec.takeStdin: the run's stdin pipe, stored before the process exists so run can
@@ -167,7 +173,7 @@ func (s *acpSession) respond(m acpMessage) {
 		if p := limitPattern(m.Error.Message); p != "" {
 			s.limited = p
 		}
-		s.fail(fmt.Errorf("devin %s: %s", acpStepName(s.step), m.Error.Message))
+		s.fail(fmt.Errorf("devin %s: %s (code %d)", acpStepName(s.step), m.Error.Message, m.Error.Code))
 		return
 	}
 	switch s.step {
@@ -197,7 +203,11 @@ func (s *acpSession) respond(m acpMessage) {
 			} `json:"usage"`
 		}
 		if err := json.Unmarshal(m.Result, &r); err == nil {
-			s.tokens = cmp.Or(r.Usage.TotalTokens, r.Usage.InputTokens+r.Usage.OutputTokens)
+			// an absent usage writes nothing: agent_stopped already recorded its count, and it
+			// arrives first, so a zero result must not clobber it
+			if t := cmp.Or(r.Usage.TotalTokens, r.Usage.InputTokens+r.Usage.OutputTokens); t > 0 {
+				s.tokens = t
+			}
 			if r.StopReason != "" && r.StopReason != "end_turn" {
 				s.d.emit(s.sink, Event{Kind: EventInfo, Text: "stopped: " + r.StopReason})
 			}
@@ -316,6 +326,14 @@ func toolLabel(title string, rawInput json.RawMessage) string {
 		}
 	}
 	return clampRunes(flattenLines(title))
+}
+
+// noteStderr keeps the last non-empty stderr line. Devin carries no session id or token footer the
+// way codex's does, so the stream is read for the diagnostic alone.
+func (s *acpSession) noteStderr(l string) {
+	if t := strings.TrimSpace(l); t != "" {
+		s.diag = t
+	}
 }
 
 // fail records the first rpc-level failure and closes stdin so the server exits instead of waiting

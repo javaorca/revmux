@@ -251,6 +251,7 @@ func TestProfile_ValidationErrors(t *testing.T) {
 		// load rather than at the moment the archive builds a filename out of it
 		{"name with a separator", "agents:\n  - {name: a/b, lenses: [bugs]}\n", `agent "a/b" contains a path separator`},
 		{"absolute name", "agents:\n  - {name: /etc/passwd, lenses: [bugs]}\n", `agent "/etc/passwd" is an absolute path`},
+		{"absolute name rooted at backslash", "agents:\n  - {name: \\etc\\passwd, lenses: [bugs]}\n", `agent "\\etc\\passwd" is an absolute path`},
 		{"name referencing a parent", "agents:\n  - {name: ..up, lenses: [bugs]}\n", `agent "..up" references a parent`},
 		{"hidden name", "agents:\n  - {name: .hidden, lenses: [bugs]}\n", `agent ".hidden" starts with a dot`},
 		{"bad color name", "agents:\n  - {name: a, lenses: [bugs], color: puce}\n", `invalid color "puce"`},
@@ -471,7 +472,7 @@ func TestStage_FrontMatter(t *testing.T) {
 
 func TestVocabularies(t *testing.T) {
 	assert.Equal(t, []string{"low", "medium", "high", "xhigh", "max"}, Efforts())
-	assert.Equal(t, []string{"claude", "codex"}, Executors())
+	assert.Equal(t, []string{"claude", "codex", "devin"}, Executors())
 
 	Efforts()[0] = "mutated"
 	Executors()[0] = "mutated"

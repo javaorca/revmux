@@ -28,7 +28,7 @@ func acpCapture(t *testing.T) []byte {
 		acpUpdate(`{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"checking the diff and the profile"}}`),
 		acpUpdate(`{"sessionUpdate":"tool_call","toolCallId":"t1","title":"Ran git","kind":"execute","rawInput":{"command":"git diff --stat HEAD~1"}}`),
 		acpUpdate(`{"sessionUpdate":"tool_call","toolCallId":"t2","title":"Read app/main.go","kind":"read"}`),
-		acpUpdate(`{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"{\"findings\":[{\"file\":\"a.go\""}}}`),
+		acpUpdate(`{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"{\"findings\":[{\"file\":\"a.go\""}}`),
 		acpUpdate(`{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":",\"line\":1,\"severity\":\"major\",\"confidence\":90,\"title\":\"leak\",\"lenses\":[\"bugs\"]}]}"}}`),
 		acpUpdate(`{"sessionUpdate":"usage_update","used":40,"size":262000}`),
 		`{"jsonrpc":"2.0","method":"_cognition.ai/agent_stopped","params":{"sessionId":"fake-session",` +
@@ -53,6 +53,12 @@ const acpPermission = `{"jsonrpc":"2.0","id":99,"method":"session/request_permis
 	`"toolCall":{"toolCallId":"t9","title":"Run git push"},"options":[` +
 	`{"optionId":"allow-once","name":"Allow once","kind":"allow_once"},` +
 	`{"optionId":"reject-once","name":"Reject","kind":"reject_once"}]}}`
+
+// acpPermissionDeny is an ask that offers no allow kind — the run must cancel it rather than pick.
+const acpPermissionDeny = `{"jsonrpc":"2.0","id":98,"method":"session/request_permission","params":{"sessionId":"fake-session",` +
+	`"toolCall":{"toolCallId":"t8","title":"rm -rf build"},"options":[` +
+	`{"optionId":"reject-once","name":"Reject","kind":"reject_once"},` +
+	`{"optionId":"reject-always","name":"Never","kind":"reject_always"}]}}`
 
 // acpStdinDump is the file the fake writes every client line to, so a test can read back what the
 // session actually said on the wire.
@@ -139,6 +145,25 @@ func countOf(texts []string, want string) int {
 	return n
 }
 
+func TestDevin_Run_tokensFallBackToAgentStopped(t *testing.T) {
+	// the prompt result carries no usage, so the count agent_stopped reported is the one kept
+	fixture := append([]byte("!nousage\n"), acpCapture(t)...)
+	d := executor.NewDevin(fakeRunner("acp", writeFixture(t, fixture)), executor.Opts{})
+	res, err := d.Run(context.Background(), executor.Request{Prompt: "x"}, discardSink())
+	require.NoError(t, err)
+	assert.Equal(t, 12, res.Tokens, "5+7 from agent_stopped, not 41 from the fixed usage block")
+}
+
+func TestDevin_Run_stderrDiagnosticSurfacesOnFailedExit(t *testing.T) {
+	// a devin that fails before the protocol exists — an old CLI, missing auth — says why on stderr
+	errPath := writeFixture(t, []byte("devin: 'acp' is not a devin command. See 'devin --help'.\n"))
+	d := executor.NewDevin(fakeRunner("fail", writeFixture(t, nil), errPath), executor.Opts{})
+	_, err := d.Run(context.Background(), executor.Request{Prompt: "x"}, discardSink())
+	require.Error(t, err, "a bare exit code drops the line that explains it")
+	assert.Contains(t, err.Error(), "devin failed")
+	assert.Contains(t, err.Error(), "not a devin command")
+}
+
 func TestDevin_Run_promptGoesOverTheWire(t *testing.T) {
 	dump := acpStdinDump(t)
 	d := executor.NewDevin(fakeRunner("acp", writeFixture(t, acpCapture(t)), dump), executor.Opts{})
@@ -170,6 +195,21 @@ func TestDevin_Run_answersPermissionWithAllow(t *testing.T) {
 	assert.Contains(t, string(sent), `"optionId":"allow-once"`,
 		"an unanswered ask would stall the turn the way a terminal prompt would")
 	assert.Contains(t, eventTexts(sink, executor.EventInfo), "approved Run git push")
+}
+
+func TestDevin_Run_permissionWithoutAllowCancels(t *testing.T) {
+	// an ask carrying no allow option is declined, not hung on: the server must get an outcome
+	fixture := append([]byte(acpPermissionDeny+"\n"), acpCapture(t)...)
+	dump := acpStdinDump(t)
+
+	d := executor.NewDevin(fakeRunner("acp", writeFixture(t, fixture), dump), executor.Opts{})
+	res, err := d.Run(context.Background(), executor.Request{Prompt: "x"}, discardSink())
+	require.NoError(t, err)
+	assert.Equal(t, 0, res.ExitCode)
+
+	sent, err := os.ReadFile(dump)
+	require.NoError(t, err)
+	assert.Contains(t, string(sent), `"outcome":"cancelled"`)
 }
 
 func TestDevin_Run_unknownServerRequestRejected(t *testing.T) {

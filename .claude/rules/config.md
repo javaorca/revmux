@@ -623,9 +623,10 @@ still carries every verdict verification wrote, and counting them there would cr
 filter with work it only passed through.
 
 **`SourceStat.Tokens` is not one quantity.** claude sums input, output and both cache counters; codex
-scrapes the number after its own `tokens used` footer. The field is honest per agent and over time, and
-does not support ranking agents of different executors against each other. Its godoc says so, because the
-comparison is the natural thing to reach for and it is wrong.
+scrapes the number after its own `tokens used` footer; devin takes the `session/prompt` response's
+`usage`, falling back to `_cognition.ai/agent_stopped` when the response carries none. The field is
+honest per agent and over time, and does not support ranking agents of different executors against
+each other. Its godoc says so, because the comparison is the natural thing to reach for and it is wrong.
 
 **Every survivor and every per-lens number comes from the per-stage snapshots, never from `findings.json`.**
 That file is the `--min-confidence`-filtered report and its survivors are split across four arrays; counting

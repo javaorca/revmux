@@ -232,6 +232,7 @@ codex plugin add revmux@revmux</pre>
           </li>
           <li><code>claude-only</code>: claude alone</li>
           <li><code>codex-only</code>: codex alone</li>
+          <li><code>devin-only</code>: devin alone</li>
         </ul>
         <p>
           <code>preflight.sh</code> in the shipped skill answers it for any profile and any invocation,
@@ -520,7 +521,7 @@ Reviewing the token exchange path after the provider swap.</pre>
 │   ├── profiles/
 │   │   ├── comprehensive.md  roster front matter + shared preamble + severity bar
 │   │   ├── focused.md  final.md  claude-only.md  codex-only.md
-│   │   └── grill-me.md  expert.md  triage.md
+│   │   └── grill-me.md  devin-only.md  expert.md  triage.md
 │   ├── synthesis.md
 │   └── verify.md
 └── lenses/
@@ -574,14 +575,15 @@ agents:
         <h3>The model string</h3>
         <p>
           One <code>model</code> string selects the binary, the model and the effort together. The binary leads
-          and is mandatory, either <code>claude</code> or <code>codex</code>, so a value validates itself and
+          and is mandatory — <code>claude</code>, <code>codex</code> or <code>devin</code> — so a value validates itself and
           revmux never has to guess which CLI runs <code>gpt-6.1-sol</code> from a catalog of model names that
           would go stale.
         </p>
         <pre class="code">claude                   claude, its own default model and effort
 claude/opus:high         fully specified
 codex/gpt-6.1-sol          effort falls back to the profile's, then the binary's
-codex:high               codex's default model at high effort</pre>
+codex:high               codex's default model at high effort
+devin/swe-2:high         devin folds effort into the model: --model swe-2-high</pre>
         <p>
           The three travel together because they are not independent: <code>opus</code> means nothing to codex.
           A file cannot state a pairing that will not run, and an entry naming a different binary than the
@@ -638,6 +640,13 @@ codex:high               codex's default model at high effort</pre>
                 <td>codex-only</td>
                 <td class="prose">
                   the same four lens splits on codex, and synthesis and verify with them, no claude anywhere
+                </td>
+              </tr>
+              <tr>
+                <td>devin-only</td>
+                <td class="prose">
+                  the same four lens splits on devin, and synthesis and verify with them, no claude or
+                  codex anywhere
                 </td>
               </tr>
               <tr>

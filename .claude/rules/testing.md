@@ -12,7 +12,7 @@ and never edited by hand.
 ### No test spawns a real model
 
 Not in CI, not locally, not "just this once to check".
-A test that shells out to `claude` or `codex` is slow, costs money, needs auth, and fails for reasons
+A test that shells out to `claude`, `codex` or `devin` is slow, costs money, needs auth, and fails for reasons
 that have nothing to do with the code under test.
 
 Every executor test drives a mocked `CommandRunner` that returns a **recorded stream fixture** from
@@ -37,8 +37,12 @@ The supervisor's behavior is defined by these, so they are written before the co
   forwarding, the model read-back and the diagnostic gate are tested against.
   The single capture prints each header line once and so cannot exercise the dedup at all —
   the doubled-banner fixture is derived from it, like every other derivation here.
+- **devin acp** — no recorded capture at all. The `acp` helper mode answers the handshake and replays
+  a session built in `acpCapture`, hand-written on purpose: the wire shape is a published protocol,
+  not a stream that has to be observed to be believed.
 
-Fixtures are recorded from real CLI output, not hand-written.
+Fixtures are recorded from real CLI output, not hand-written — the devin `acp` fixture above is the
+one exception.
 Hand-written fixtures encode what someone assumed the CLI emits, which is exactly the class of bug they should catch.
 
 **A claude capture carries the recording machine's environment, and this repository is public.**

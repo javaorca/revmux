@@ -1,6 +1,6 @@
 ---
 description: all eight lenses across four devin agents, synthesized and verified by devin, with no claude or codex anywhere
-model: devin
+model: devin/swe-2:high
 agents:
   - {name: bugs+impl,    lenses: [bugs, impl],            color: cyan}
   - {name: arch+quality, lenses: [architecture, quality], color: magenta}

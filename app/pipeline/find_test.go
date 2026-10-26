@@ -793,6 +793,7 @@ func TestFinder_rawName(t *testing.T) {
 	}{
 		{name: "claude stream-json", spec: prompt.AgentSpec{Name: "bugs", Executor: "claude"}, want: "agents/bugs.jsonl"},
 		{name: "codex prose", spec: prompt.AgentSpec{Name: "codex", Executor: "codex"}, want: "agents/codex.log"},
+		{name: "devin acp is line-delimited", spec: prompt.AgentSpec{Name: "dev", Executor: "devin"}, want: "agents/dev.jsonl"},
 		{name: "an agent named events cannot collide", spec: prompt.AgentSpec{Name: "events", Executor: "claude"}, want: "agents/events.jsonl"},
 		{name: "a claude retry keeps both attempts", spec: prompt.AgentSpec{Name: "bugs", Executor: "claude"}, attempt: 1, want: "agents/bugs.retry.jsonl"},
 		{name: "a codex retry keeps both attempts", spec: prompt.AgentSpec{Name: "codex", Executor: "codex"}, attempt: 1, want: "agents/codex.retry.log"},

@@ -242,8 +242,8 @@ failing process to have something to order against. The `fail` helper mode exist
 
 ### Shared base, thin executors
 
-`Claude` and `Codex` both need the same run loop, idle watchdog, process-group teardown and line reader.
-Duplicating that gives two near-identical `Run` bodies, which `dupl` will fail in lint.
+`Claude`, `Codex` and `Devin` all need the same run loop, idle watchdog, process-group teardown and
+line reader. Duplicating that gives near-identical `Run` bodies, which `dupl` will fail in lint.
 
 Put the shared machinery on an unexported `proc` struct that both embed.
 Each executor supplies only its own `args()` and its own output parsing.
@@ -300,7 +300,7 @@ Codex is a peer executor, not a special case in the pipeline — but the executo
   stdout write.
 - **Codex has no `--json-schema`.**
   The executor appends its own "return only JSON matching this shape" contract to the composed prompt,
-  rendering `Request.Schema` inline. That field is set for **both** executors and carries the running
+  rendering `Request.Schema` inline. That field is set for all three executors and carries the running
   stage's schema, so a codex entry running synthesis or verify asks for that stage's shape.
   Hardcoding a finder-shaped contract here breaks the moment a profile resolves a stage onto codex.
   The wrapper text lives in the executor, never in a lens file, which must stay executor-agnostic.
@@ -365,9 +365,50 @@ Codex is a peer executor, not a special case in the pipeline — but the executo
   The check ignores project trust, as verified in Codex 0.146.0's
   [`exec-lib.rs` (`codex-rs/exec/src/lib.rs`)](https://github.com/openai/codex/blob/rust-v0.146.0/codex-rs/exec/src/lib.rs#L790-L799).
 
+### Devin differences
+
+Devin is the one executor that speaks a protocol rather than a document: `devin acp` is an Agent
+Client Protocol server on stdio, newline-delimited JSON-RPC in both directions. The prompt is a
+`session/prompt` request inside the conversation, not the process's stdin payload, so stdin stays
+open the whole run — `runSpec.takeStdin` exists for exactly this executor, and `proc.start` hands the
+pipe over before the process exists so the session can write the moment it reads.
+
+- **The handshake is fixed ids, and the step counter — not the id — says a response is ours.**
+  `initialize`, `session/new`, `session/prompt` go out as ids 1, 2, 3 because the conversation is
+  strictly sequential and at most one is ever outstanding. A response carrying a different id is
+  dropped rather than matched by id alone.
+- **stdin EOF is the shutdown an ACP server understands.**
+  After the `session/prompt` response the client closes stdin and the server exits on its own;
+  leaving it open holds a live server against `proc`'s wait. An rpc-level failure closes it the same
+  way rather than waiting out an answer that will not come.
+- **`session/request_permission` gets an allow; any other server request gets method-not-found.**
+  Capabilities are advertised empty — `fs` and `terminal` both false — so fs and terminal requests
+  never arrive, and a permission ask is granted the way `--permission-mode auto` grants it: the
+  alternative is denying work the review needs, and the read-only guarantee rests on the prompt, same
+  as it does for claude's Bash.
+- **The answer is `agent_message_chunk` text, accumulated and never emitted as an event.**
+  Message chunks are the answer itself, so forwarding them would put the findings JSON into the
+  scrollback; `agent_thought_chunk` is the narration that maps onto EventActivity instead, and the
+  first message chunk is announced once as `answering`.
+- **Model, TTFT and a fallback token count come from `_cognition.ai/agent_stopped`.**
+  That is a devin extension notification, not ACP; the `session/prompt` result's own `usage` wins when
+  both report a count.
+- **Effort folds into the model name.** `devin/swe-2:high` launches `--model swe-2-high`, the same
+  resolution `devin/swe-2-high` gives, since devin's `--model` takes fuzzy names.
+- **A rate limit is a JSON-RPC error on the prompt request, never prose**, so the match runs on the
+  error message itself and stays a small direct pattern set.
+- The output contract is the same one codex appends — `devin acp` has no schema mechanism either —
+  and `--agent-type review` is devin's own read-only-plus-shell reviewer, the closest thing to the
+  tool allowlist claude is launched under.
+- **stderr is read for the last non-empty line only.** It carries no session id or token footer the
+  way codex's does, but a devin that dies before the protocol exists — an old CLI without `acp`,
+  missing auth — says why there, so a non-zero exit with a diagnostic becomes `devin failed: <line>`
+  rather than a bare `exit 3`.
+
 ### Error and limit patterns
 
-claude gets its rate-limit signal from the typed `rate_limit_event`, so string matching is only needed for codex.
+claude gets its rate-limit signal from the typed `rate_limit_event`, so string matching is only needed
+for codex — and devin, whose rpc error message is the whole of what it matches.
 Where patterns are used, tier them: **retry → limit → error**.
 
 - Retry tier covers transient server hiccups: `API Error: 529`, `502`, `503`, `504`.
@@ -387,7 +428,7 @@ Where patterns are used, tier them: **retry → limit → error**.
 
 ### Capturing real streams for fixtures
 
-To learn what the upstream CLIs actually emit, do not launch `claude` or `codex` from an AI agent's own tool shell —
+To learn what the upstream CLIs actually emit, do not launch `claude`, `codex` or `devin` from an AI agent's own tool shell —
 nested launches are commonly blocked by the host tool's permission layer, and the capture silently fails.
 Run the capture in a separate, independent terminal session, redirect stdout and stderr to files, and inspect those.
 Recorded captures belong in `app/executor/testdata/` as fixtures; see `.claude/rules/testing.md`.

@@ -33,7 +33,7 @@ nfpms:
     vendor: umputun
     homepage: https://github.com/umputun/revmux
     maintainer: umputun
-    description: Supervised multi-agent code review with parallel claude and codex subprocesses
+    description: Supervised multi-agent code review with parallel claude, codex and devin subprocesses
     license: MIT
     formats:
       - deb
@@ -47,7 +47,7 @@ homebrew_casks:
       owner: umputun
       name: homebrew-apps
     homepage: https://github.com/umputun/revmux
-    description: Supervised multi-agent code review with parallel claude and codex subprocesses
+    description: Supervised multi-agent code review with parallel claude, codex and devin subprocesses
     license: MIT
     binaries:
       - revmux

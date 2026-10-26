@@ -101,7 +101,7 @@ func TestPipeline_Run_artifacts(t *testing.T) {
 
 		archived := h.get("prompts/agents/codex.md")
 		require.NotNil(t, archived, "no prompt was archived for the codex entry")
-		assert.Equal(t, got.Prompt+executor.CodexOutputContract(got.Schema), archived.String(),
+		assert.Equal(t, got.Prompt+executor.OutputContract(got.Schema), archived.String(),
 			"codex appends its output contract after dispatch, so an archive without it describes a different run")
 		assert.Contains(t, archived.String(), "Return ONLY a JSON object",
 			"the one instruction asking codex for JSON at all cannot be the missing part")
